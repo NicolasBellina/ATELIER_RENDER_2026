@@ -63,11 +63,29 @@ resource "render_static_site" "frontend" {
   publish_path   = "build"
   auto_deploy    = true
 
-  env_vars = {
-    REACT_APP_API_URL = {
-      value = render_web_service.flask_app.url
-    }
-  }
+  # Proxy same-origin vers Flask (évite CORS et bloqueurs navigateur)
+  routes = [
+    {
+      source      = "/health"
+      destination = "${render_web_service.flask_app.url}/health"
+      type        = "rewrite"
+    },
+    {
+      source      = "/info"
+      destination = "${render_web_service.flask_app.url}/info"
+      type        = "rewrite"
+    },
+    {
+      source      = "/env"
+      destination = "${render_web_service.flask_app.url}/env"
+      type        = "rewrite"
+    },
+    {
+      source      = "/api/*"
+      destination = "${render_web_service.flask_app.url}/api/*"
+      type        = "rewrite"
+    },
+  ]
 
   depends_on = [render_web_service.flask_app]
 }

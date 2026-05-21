@@ -1,9 +1,32 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import './App.css';
 
+// En prod Render : requêtes relatives proxifiées par public/_redirects
+// En dev local : REACT_APP_API_URL ou localhost:5000
 const API_URL = (
-  process.env.REACT_APP_API_URL || 'https://flask-render-iac-nicolasbellina.onrender.com'
+  process.env.REACT_APP_API_URL ||
+  (process.env.NODE_ENV === 'development'
+    ? 'http://localhost:5000'
+    : '')
 ).replace(/\/$/, '');
+
+const apiFetch = async (path, retries = 4) => {
+  const url = `${API_URL}${path}`;
+  for (let i = 0; i < retries; i += 1) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return res;
+      if (res.status >= 500 && i < retries - 1) {
+        await new Promise((r) => setTimeout(r, 5000));
+        continue;
+      }
+      throw new Error(`${path} → HTTP ${res.status}`);
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+  }
+};
 
 function App() {
   const [health, setHealth] = useState(null);
@@ -20,8 +43,7 @@ function App() {
     setError(null);
 
     const fetchJson = async (path) => {
-      const res = await fetch(`${API_URL}${path}`);
-      if (!res.ok) throw new Error(path);
+      const res = await apiFetch(path);
       return res.json();
     };
 
@@ -34,21 +56,26 @@ function App() {
       setHealth(healthData);
       setInfo(infoData);
       setEnv(envData);
-    } catch {
+    } catch (err) {
+      const hint = API_URL
+        ? `Ouvrez d'abord ${API_URL}/health dans un onglet (réveil du serveur Render gratuit), puis réessayez.`
+        : 'Ouvrez https://react-nicolasbellina.onrender.com (pas un autre site). Le serveur Render gratuit met ~30s à démarrer.';
       setError(
-        `Impossible de joindre l'API Flask (${API_URL}). Vérifiez que le service est déployé sur Render.`
+        `Impossible de joindre l'API Flask${API_URL ? ` (${API_URL})` : ''}. ${hint} Détail : ${err.message}`
       );
       setLoading(false);
       return;
     }
 
     try {
-      const itemsData = await fetchJson('/api/items');
+      const itemsRes = await apiFetch('/api/items');
+      const itemsData = await itemsRes.json();
+      if (!itemsRes.ok) throw new Error(itemsData.error || 'items');
       setItems(itemsData);
-    } catch {
+    } catch (err) {
       setItems([]);
       setError(
-        `API Flask joignable, mais la base PostgreSQL ne répond pas. Ajoutez le secret RENDER_DATABASE_URL (Internal Database URL) dans GitHub.`
+        `API joignable, mais PostgreSQL non configuré. Ajoutez le secret GitHub RENDER_DATABASE_URL (Internal Database URL Render), puis redéployez. Détail : ${err.message}`
       );
     } finally {
       setLoading(false);
@@ -65,12 +92,12 @@ function App() {
 
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_URL}/api/items`, {
+      const postRes = await fetch(`${API_URL}/api/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: title.trim() }),
       });
-      if (!res.ok) throw new Error('Erreur lors de la création');
+      if (!postRes.ok) throw new Error('Erreur lors de la création');
       setTitle('');
       await fetchAll();
     } catch {
