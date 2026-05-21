@@ -35,3 +35,15 @@ resource "render_web_service" "flask_app" {
     }
   }
 }
+
+resource "render_web_service" "adminer" {
+  name   = "adminer-${var.github_actor}"
+  plan   = "free"
+  region = "frankfurt"
+
+  runtime_source = {
+    image = {
+      image_url = "adminer:latest"
+    }
+  }
+}
