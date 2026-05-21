@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import './App.css';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const API_URL = (
+  process.env.REACT_APP_API_URL || 'https://flask-render-iac-nicolasbellina.onrender.com'
+).replace(/\/$/, '');
 
 function App() {
   const [health, setHealth] = useState(null);
@@ -16,25 +18,37 @@ function App() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     setError(null);
+
+    const fetchJson = async (path) => {
+      const res = await fetch(`${API_URL}${path}`);
+      if (!res.ok) throw new Error(path);
+      return res.json();
+    };
+
     try {
-      const [healthRes, infoRes, envRes, itemsRes] = await Promise.all([
-        fetch(`${API_URL}/health`),
-        fetch(`${API_URL}/info`),
-        fetch(`${API_URL}/env`),
-        fetch(`${API_URL}/api/items`),
+      const [healthData, infoData, envData] = await Promise.all([
+        fetchJson('/health'),
+        fetchJson('/info'),
+        fetchJson('/env'),
       ]);
-
-      if (!healthRes.ok || !infoRes.ok || !envRes.ok || !itemsRes.ok) {
-        throw new Error('Une ou plusieurs requêtes ont échoué');
-      }
-
-      setHealth(await healthRes.json());
-      setInfo(await infoRes.json());
-      setEnv(await envRes.json());
-      setItems(await itemsRes.json());
-    } catch (err) {
+      setHealth(healthData);
+      setInfo(infoData);
+      setEnv(envData);
+    } catch {
       setError(
-        `Impossible de joindre l'API Flask (${API_URL}). Lancez docker compose up ou le backend.`
+        `Impossible de joindre l'API Flask (${API_URL}). Vérifiez que le service est déployé sur Render.`
+      );
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const itemsData = await fetchJson('/api/items');
+      setItems(itemsData);
+    } catch {
+      setItems([]);
+      setError(
+        `API Flask joignable, mais la base PostgreSQL ne répond pas. Ajoutez le secret RENDER_DATABASE_URL (Internal Database URL) dans GitHub.`
       );
     } finally {
       setLoading(false);

@@ -7,15 +7,14 @@ from flask_cors import CORS
 from psycopg2.extras import RealDictCursor
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://atelier:atelier@localhost:5432/atelier",
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 
 def get_db():
+    if not DATABASE_URL:
+        raise psycopg2.OperationalError("DATABASE_URL non configurée")
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
 
@@ -86,6 +85,8 @@ def env():
 
 @app.route("/api/items", methods=["GET"])
 def list_items():
+    if not DATABASE_URL:
+        return jsonify({"error": "DATABASE_URL non configurée sur Render"}), 503
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -97,6 +98,8 @@ def list_items():
 
 @app.route("/api/items", methods=["POST"])
 def create_item():
+    if not DATABASE_URL:
+        return jsonify({"error": "DATABASE_URL non configurée sur Render"}), 503
     data = request.get_json(silent=True) or {}
     title = (data.get("title") or "").strip()
     if not title:
@@ -115,6 +118,8 @@ def create_item():
 
 @app.route("/api/items/<int:item_id>", methods=["DELETE"])
 def delete_item(item_id):
+    if not DATABASE_URL:
+        return jsonify({"error": "DATABASE_URL non configurée sur Render"}), 503
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -128,14 +133,28 @@ def delete_item(item_id):
     return jsonify({"deleted": item_id})
 
 
-with app.app_context():
-    try:
-        init_db()
-    except RuntimeError:
-        pass
+_db_ready = False
+
+
+def ensure_db():
+    global _db_ready
+    if _db_ready or not DATABASE_URL:
+        return
+    init_db()
+    _db_ready = True
+
+
+@app.before_request
+def before_request():
+    if request.path.startswith("/api/"):
+        try:
+            ensure_db()
+        except RuntimeError:
+            pass
 
 
 if __name__ == "__main__":
-    init_db()
+    if DATABASE_URL:
+        init_db()
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, debug=True)
