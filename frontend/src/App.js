@@ -1,34 +1,42 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import './App.css';
 
-// En prod Render : requêtes relatives proxifiées par public/_redirects
-// En dev local : REACT_APP_API_URL ou localhost:5000
-const API_URL = (
-  process.env.REACT_APP_API_URL ||
-  (process.env.NODE_ENV === 'development'
-    ? 'http://localhost:5000'
-    : '')
-).replace(/\/$/, '');
+/** URL de base de l'API — calculée au runtime dans le navigateur */
+export function getApiBase() {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    // Static Site React sur Render → requêtes relatives + _redirects
+    if (host.endsWith('.onrender.com') && host.startsWith('react-')) {
+      return '';
+    }
+  }
+  const fromEnv = process.env.REACT_APP_API_URL || '';
+  if (fromEnv) return fromEnv.replace(/\/$/, '');
+  if (process.env.NODE_ENV === 'development') return 'http://localhost:5000';
+  return '';
+}
 
-const apiFetch = async (path, retries = 4) => {
-  const url = `${API_URL}${path}`;
+const apiFetch = async (apiBase, path, retries = 5) => {
+  const url = `${apiBase}${path}`;
   for (let i = 0; i < retries; i += 1) {
     try {
       const res = await fetch(url);
       if (res.ok) return res;
       if (res.status >= 500 && i < retries - 1) {
-        await new Promise((r) => setTimeout(r, 5000));
+        await new Promise((r) => setTimeout(r, 6000));
         continue;
       }
-      throw new Error(`${path} → HTTP ${res.status}`);
+      throw new Error(`${url} → HTTP ${res.status}`);
     } catch (err) {
       if (i === retries - 1) throw err;
-      await new Promise((r) => setTimeout(r, 5000));
+      await new Promise((r) => setTimeout(r, 6000));
     }
   }
+  return null;
 };
 
 function App() {
+  const [apiBase, setApiBase] = useState('');
   const [health, setHealth] = useState(null);
   const [info, setInfo] = useState(null);
   const [env, setEnv] = useState(null);
@@ -38,12 +46,18 @@ function App() {
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    setApiBase(getApiBase());
+  }, []);
+
   const fetchAll = useCallback(async () => {
+    const base = getApiBase();
+    setApiBase(base);
     setLoading(true);
     setError(null);
 
     const fetchJson = async (path) => {
-      const res = await apiFetch(path);
+      const res = await apiFetch(base, path);
       return res.json();
     };
 
@@ -57,25 +71,26 @@ function App() {
       setInfo(infoData);
       setEnv(envData);
     } catch (err) {
-      const hint = API_URL
-        ? `Ouvrez d'abord ${API_URL}/health dans un onglet (réveil du serveur Render gratuit), puis réessayez.`
-        : 'Ouvrez https://react-nicolasbellina.onrender.com (pas un autre site). Le serveur Render gratuit met ~30s à démarrer.';
+      const siteUrl = 'https://react-nicolasbellina.onrender.com';
       setError(
-        `Impossible de joindre l'API Flask${API_URL ? ` (${API_URL})` : ''}. ${hint} Détail : ${err.message}`
+        `Impossible de joindre l'API (requête vers ${base || 'même domaine'}${err.message ? `). ${err.message}` : ')'}. ` +
+          `Utilisez ${siteUrl}, attendez 60 s (plan gratuit Render), puis Réessayez. ` +
+          `Test direct : https://flask-render-iac-nicolasbellina.onrender.com/health`
       );
       setLoading(false);
       return;
     }
 
     try {
-      const itemsRes = await apiFetch('/api/items');
+      const itemsRes = await apiFetch(base, '/api/items', 2);
       const itemsData = await itemsRes.json();
       if (!itemsRes.ok) throw new Error(itemsData.error || 'items');
-      setItems(itemsData);
+      setItems(Array.isArray(itemsData) ? itemsData : []);
+      setError(null);
     } catch (err) {
       setItems([]);
       setError(
-        `API joignable, mais PostgreSQL non configuré. Ajoutez le secret GitHub RENDER_DATABASE_URL (Internal Database URL Render), puis redéployez. Détail : ${err.message}`
+        `API OK, PostgreSQL manquant. Secret GitHub : RENDER_DATABASE_URL = Internal Database URL. ${err.message}`
       );
     } finally {
       setLoading(false);
@@ -83,16 +98,17 @@ function App() {
   }, []);
 
   useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+    if (apiBase !== undefined) fetchAll();
+  }, [apiBase, fetchAll]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!title.trim()) return;
+    const base = getApiBase();
 
     setSubmitting(true);
     try {
-      const postRes = await fetch(`${API_URL}/api/items`, {
+      const postRes = await fetch(`${base}/api/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: title.trim() }),
@@ -108,10 +124,9 @@ function App() {
   };
 
   const handleDelete = async (id) => {
+    const base = getApiBase();
     try {
-      const res = await fetch(`${API_URL}/api/items/${id}`, {
-        method: 'DELETE',
-      });
+      const res = await fetch(`${base}/api/items/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error();
       await fetchAll();
     } catch {
@@ -119,13 +134,19 @@ function App() {
     }
   };
 
+  const apiLabel =
+    apiBase ||
+    (typeof window !== 'undefined'
+      ? `${window.location.origin} (proxy → Flask)`
+      : '…');
+
   return (
     <div className="app">
       <header className="hero">
         <p className="badge">Atelier Render — ESGI M1</p>
         <h1>Plateforme React + Flask + PostgreSQL</h1>
         <p className="subtitle">
-          Front React · Back Flask · BDD PostgreSQL · Adminer sur le port 8080
+          Front React · Back Flask · BDD PostgreSQL · Adminer
         </p>
       </header>
 
@@ -193,7 +214,7 @@ function App() {
         <section className="panel">
           <div className="panel-header">
             <h2>Éléments en base (PostgreSQL)</h2>
-            <span className="api-url">API : {API_URL}</span>
+            <span className="api-url">API : {apiLabel}</span>
           </div>
 
           <form className="add-form" onSubmit={handleSubmit}>
@@ -211,7 +232,7 @@ function App() {
 
           {loading ? (
             <p className="muted center">Chargement des données…</p>
-          ) : items.length === 0 ? (
+          ) : items.length === 0 && !error ? (
             <p className="muted center">Aucun élément pour le moment.</p>
           ) : (
             <ul className="item-list">
@@ -241,9 +262,7 @@ function App() {
         </section>
       </main>
 
-      <footer>
-        Nicolas Bellina — Atelier Render 2026
-      </footer>
+      <footer>Nicolas Bellina — Atelier Render 2026</footer>
     </div>
   );
 }

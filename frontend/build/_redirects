@@ -1,0 +1,4 @@
+/health https://flask-render-iac-nicolasbellina.onrender.com/health 200
+/info https://flask-render-iac-nicolasbellina.onrender.com/info 200
+/env https://flask-render-iac-nicolasbellina.onrender.com/env 200
+/api/* https://flask-render-iac-nicolasbellina.onrender.com/api/:splat 200
