@@ -27,7 +27,8 @@ jobs:
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           ACTOR=$(echo "${{ github.actor }}" | tr '[:upper:]' '[:lower:]')
           SERVICE_NAME="flask-render-iac-${ACTOR}"
-          IMAGE_URL="ghcr.io/${OWNER}/flask-render-iac"
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_URL="ghcr.io/${REPO_LOWER}"
           IMAGE_TAG="${{ github.sha }}"
 
           echo "OWNER=${OWNER}" >> "$GITHUB_ENV"
