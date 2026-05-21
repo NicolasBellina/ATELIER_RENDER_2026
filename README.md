@@ -9,7 +9,7 @@ L’idée en 30 secondes : Dans cet atelier, vous allez construire une **chaîne
 -------------------------------------------------------------------------------------------------------
 🧩 Séquence 1 : Github
 -------------------------------------------------------------------------------------------------------
-Objectif : Forker le projet  
+Objectif : Forker le projet   
 Difficulté : Très facile (~5 minutes)
 -------------------------------------------------------------------------------------------------------
 **Faites un Fork de ce projet**. Si besoin, voici une vidéo d'accompagnement pour vous aider à "Forker" un Repository Github : [Forker ce projet](https://youtu.be/p33-7XQ29zQ) 
