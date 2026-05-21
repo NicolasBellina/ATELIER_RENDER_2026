@@ -39,6 +39,7 @@ resource "render_web_service" "flask_app" {
 resource "render_web_service" "adminer" {
   name   = "adminer"
   region = "frankfurt"
+  plan   = "free"
 
   runtime_source = {
     image = {
